@@ -2,14 +2,24 @@ package rates
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+
+	"golang.org/x/sync/errgroup"
+)
+
+const (
+	urlDolarAPIUSD = "https://ve.dolarapi.com/v1/dolares"
+	urlDolarAPIEUR = "https://ve.dolarapi.com/v1/euros"
+	urlBinanceP2P  = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+	payloadBinance = `{"page":1,"rows":5,"asset":"USDT","tradeType":"SELL","fiat":"VES","merchantCheck":false}`
 )
 
 type Service interface {
-	GetCurrentRates() (SystemRates, error)
+	GetCurrentRates(ctx context.Context) (SystemRates, error)
 }
 
 type oracleService struct {
@@ -22,33 +32,49 @@ func NewService(c *http.Client) *oracleService {
 	}
 }
 
-func (s *oracleService) GetCurrentRates() (SystemRates, error) {
+func (s *oracleService) GetCurrentRates(ctx context.Context) (SystemRates, error) {
 	rates := SystemRates{}
 
-	if err := s.fetchDolarApi(
-		"https://ve.dolarapi.com/v1/dolares",
-		&rates.USDBCV,
-		&rates.USDParallel,
-	); err != nil {
-		return rates, err
-	}
+	g, gCtx := errgroup.WithContext(ctx)
 
-	if err := s.fetchDolarApi(
-		"https://ve.dolarapi.com/v1/euros",
-		&rates.EURBCV,
-		&rates.EURParallel,
-	); err != nil {
-		return rates, err
-	}
+	// dolar
+	g.Go(func() error {
+		return s.fetchDolarApi(
+			gCtx,
+			urlDolarAPIUSD,
+			&rates.USDBCV,
+			&rates.USDParallel,
+		)
+	})
 
-	if err := s.fetchBinanceApi(&rates.Binance); err != nil {
-		return rates, err
+	// euro
+	g.Go(func() error {
+		return s.fetchDolarApi(
+			gCtx,
+			urlDolarAPIUSD,
+			&rates.EURBCV,
+			&rates.EURParallel,
+		)
+	})
+
+	// binance
+	g.Go(func() error {
+		return s.fetchBinanceApi(gCtx, &rates.Binance)
+	})
+
+	if err := g.Wait(); err != nil {
+		return SystemRates{}, nil
 	}
 
 	return rates, nil
 }
 
-func (s *oracleService) fetchDolarApi(url string, bcv *float64, parallel *float64) error {
+func (s *oracleService) fetchDolarApi(
+	ctx context.Context,
+	url string,
+	bcv *float64,
+	parallel *float64,
+) error {
 	resp, err := s.client.Get(url)
 	if err != nil {
 		return err
@@ -72,12 +98,10 @@ func (s *oracleService) fetchDolarApi(url string, bcv *float64, parallel *float6
 	return nil
 }
 
-func (s *oracleService) fetchBinanceApi(binanceRate *float64) error {
-	url := "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-	payload := []byte(`{"page":1,"rows":5,"asset":"USDT","tradeType":"SELL","fiat":"VES","merchantCheck":false}`)
+func (s *oracleService) fetchBinanceApi(ctx context.Context, binanceRate *float64) error {
 
 	// 1. Cambiamos a POST
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(payload))
+	req, err := http.NewRequest(http.MethodPost, urlBinanceP2P, bytes.NewBuffer([]byte(payloadBinance)))
 	if err != nil {
 		return err
 	}

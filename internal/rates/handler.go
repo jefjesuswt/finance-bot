@@ -16,7 +16,7 @@ func NewHandler(svc Service) *Handler {
 }
 
 func (h *Handler) GetRates(w http.ResponseWriter, r *http.Request) {
-	currentRates, err := h.service.GetCurrentRates()
+	currentRates, err := h.service.GetCurrentRates(r.Context())
 	if err != nil {
 		http.Error(w, `{"error": "Error fetching rates: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
