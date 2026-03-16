@@ -1,0 +1,43 @@
+name: Deploy Finance Bot
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x" # Actualiza a tu versión de Go
+
+      - name: Compilar binario estático
+        run: |
+          # Compilamos apuntando a la carpeta cmd/bot
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o finance-bot ./cmd/bot/main.go
+
+      - name: Enviar binario al VPS vía SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: jeffrey
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "finance-bot"
+          target: "/home/jeffrey/finance-bot-app/"
+
+      - name: Dar permisos y reiniciar servicio
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: jeffrey
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            chmod +x /home/jeffrey/finance-bot-app/finance-bot
+            # Reiniciamos el servicio en segundo plano
+            sudo systemctl restart finance-bot
