@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	reAmountCurrency = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s+(usd cash|usd bcv|usdt|bs|eur cash|eur bcv|btc|eth|bnb|matic|[a-z]+)`)
+	reAmountCurrency = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s+(usd cash|usd bcv|usd menudeo|usdt|bs|eur cash|eur bcv|eur menudeo|btc|eth|bnb|matic|[a-z]+)`)
 	reRate           = regexp.MustCompile(`(?i)tasa\s+(\d+(?:\.\d+)?)`)
 	reAccount        = regexp.MustCompile(`(?i)en\s+([a-zA-Z0-9_]+)`)
 	reTarget         = regexp.MustCompile(`(?i)por\s+(\d+(?:\.\d+)?)\s+([a-zA-Z0-9_\s]+)`)
@@ -69,8 +69,22 @@ func Parse(input string) (Transaction, error) {
 	}
 
 	tx.Action = Action(strings.ToLower(words[0]))
+
 	if tx.Account == "" {
-		tx.Account = AccountCash
+		switch tx.Currency {
+
+		case CurrencyUSDCash, CurrencyEURCash:
+			tx.Account = AccountCash
+
+		case CurrencyUSDT, CurrencyBTC, CurrencyETH, CurrencyBNB, CurrencyMATIC:
+			tx.Account = AccountBinance // binance por defecto, tambien puede ser Coinbase
+
+		case CurrencyUSDBCV, CurrencyEURBCV, CurrencyUSDMenudeo, CurrencyBS:
+			tx.Account = AccountBancamiga // bancamiga por defecto, tambien puede ser BDV
+
+		default:
+			tx.Account = AccountCash
+		}
 	}
 
 	switch tx.Action {

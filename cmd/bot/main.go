@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jefjesuswt/finance-bot/internal/github"
+	"github.com/jefjesuswt/finance-bot/internal/processor"
 	"github.com/jefjesuswt/finance-bot/internal/rates"
 	"github.com/jefjesuswt/finance-bot/internal/telegram"
 	"github.com/joho/godotenv"
@@ -22,9 +24,6 @@ func main() {
 
 	// telegram token
 	token := os.Getenv("TELEGRAM_TOKEN")
-	if token == "" {
-		log.Fatal("TELEGRAM_TOKEN no está configurado")
-	}
 
 	// allowed chat id
 	acid, err := strconv.ParseInt(os.Getenv("ALLOWED_CHAT_ID"), 10, 64)
@@ -32,13 +31,45 @@ func main() {
 		log.Fatalf("Error parsing ALLOWED_CHAT_ID: %v", err)
 	}
 
+	// git envs
+	gitToken := os.Getenv("GIT_TOKEN")
+	gitOwner := os.Getenv("GIT_OWNER")
+	gitRepo := os.Getenv("GIT_REPO")
+
+	// vault
+	obsidianBasePath := os.Getenv("OBSIDIAN_BASE_PATH")
+
+	if obsidianBasePath == "" {
+		obsidianBasePath = "08 - Finances/Transacciones"
+		log.Printf("⚠️ [WARN] OBSIDIAN_BASE_PATH vacío. Usando por defecto: '%s'", obsidianBasePath)
+	}
+
+	requiredVars := map[string]string{
+		"TELEGRAM_TOKEN": token,
+		"GIT_TOKEN":      gitToken,
+		"GIT_OWNER":      gitOwner,
+		"GIT_REPO":       gitRepo,
+	}
+
+	for key, value := range requiredVars {
+		if value == "" {
+			log.Fatalf("❌ [FATAL] Falta la variable de entorno: %s", key)
+		}
+	}
+
+	// github
+	ghClient := github.NewClient(httpClient, gitToken, gitOwner, gitRepo)
+
 	// rates
 	ratesService := rates.NewService(httpClient)
 	ratesHandler := rates.NewHandler(ratesService)
 
+	//processor
+	processorService := processor.NewService(ratesService, ghClient, obsidianBasePath)
+
 	// telegram
 	tgService := telegram.NewService(token, httpClient)
-	tgHandler := telegram.NewHandler(tgService, ratesService, acid)
+	tgHandler := telegram.NewHandler(tgService, processorService, acid)
 
 
 	r := chi.NewRouter()

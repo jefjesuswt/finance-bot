@@ -27,13 +27,15 @@ const (
 	AccountBinance 	 Account = "binance"
 	AccountCoinbase  Account = "coinbase"
 	AccountBancamiga Account = "bancamiga"
+	AccountBDV 	 	 Account = "bdv"
 
 	// fiat
-	CurrencyUSDCash Currency = "usd cash"
-	CurrencyUSDBCV  Currency = "usd bcv"
-	CurrencyEURCash Currency = "eur cash"
-	CurrencyEURBCV  Currency = "eur bcv"
-	CurrencyBS      Currency = "bs"
+	CurrencyUSDCash 	Currency = "usd cash"
+	CurrencyUSDBCV  	Currency = "usd bcv"
+	CurrencyUSDMenudeo 	Currency = "usd menudeo"
+	CurrencyEURCash 	Currency = "eur cash"
+	CurrencyEURBCV  	Currency = "eur bcv"
+	CurrencyBS      	Currency = "bs"
 
 	// cripto
 	CurrencyUSDT  Currency = "usdt"

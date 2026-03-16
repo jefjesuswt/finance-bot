@@ -6,24 +6,26 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jefjesuswt/finance-bot/internal/parser"
-	"github.com/jefjesuswt/finance-bot/internal/rates"
+	"github.com/jefjesuswt/finance-bot/internal/processor"
 )
 
 type Handler struct {
 	tgService Service
-	ratesService rates.Service
-	// todo: github.Service
+	processorService processor.Service
 
 	allowedChatID int64 // id personal de tg
 }
 
-func NewHandler(tgs Service, rs rates.Service, acid int64) *Handler {
+func NewHandler(tgs Service, proc processor.Service, acid int64) *Handler {
 	return &Handler{
 		tgService:    tgs,
-		ratesService: rs,
+		processorService: proc,
 		allowedChatID: acid,
 	}
+}
+
+func (h *Handler) isAuthorized(chatID int64) bool {
+	return h.allowedChatID == 0 || h.allowedChatID == chatID
 }
 
 func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -52,39 +54,25 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	text := update.Message.Text
 
-	tx, err := parser.Parse(text)
+	result, err := h.processorService.ProcessTransaction(ctx, text)
 	if err != nil {
-		h.tgService.SendMessage(ctx, chatID, "❌ Error de parseo:\n"+err.Error())
+		h.tgService.SendMessage(ctx, chatID, "❌ Error procesando transacción:\n"+err.Error())
 		return
 	}
 
-	if err := tx.Validate(); err != nil {
-		h.tgService.SendMessage(ctx, chatID, "❌ Error de validación:\n"+err.Error())
-		return
-	}
-
-	if len(tx.Warnings) > 0 {
-		for _, warning := range tx.Warnings {
+	if len(result.Warnings) > 0 {
+		for _, warning := range result.Warnings {
 			h.tgService.SendMessage(ctx, chatID, warning)
 		}
 	}
 
-	currentRates, err := h.ratesService.GetCurrentRates(ctx)
-	if err != nil {
-		h.tgService.SendMessage(ctx, chatID, "❌ Error obteniendo tasas:\n"+err.Error())
-		return
+	successMsg := fmt.Sprintf("✅ Transacción lista.\n📂 Destino: %s/%s\n\n%s",
+		result.Note.Folder,
+		result.Note.Filename,
+		result.Note.Content,
+	)
+	if result.ExtraMessage != "" {
+		successMsg += "\n\n" + result.ExtraMessage
 	}
-
-	// markdownFile, err := reports.BuildNote(tx, currentRates)
-	// if err != nil {
-	// 	h.tgService.SendMessage(ctx, chatID, "💥 Error armando reporte:\n"+err.Error())
-	// 	return
-	// }
-
-	successMsg := fmt.Sprintf("Transaccion procesada correctamente. con rates: %v", currentRates)
 	h.tgService.SendMessage(ctx, chatID, successMsg)
-}
-
-func (h *Handler) isAuthorized(chatID int64) bool {
-	return h.allowedChatID == 0 || h.allowedChatID == chatID
 }
